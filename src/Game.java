@@ -1,244 +1,554 @@
 
-package game;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
 
-import parser.Parser;
-import command.Command;
-import player.Player;
-import item.Item;
-import room.Room;
-import lockedroom.LockedRoom;
+public class Game extends JFrame {
 
-public class Game {
+    private final int TILE_SIZE = 70;
 
-    private Parser parser;
-    private Player player;
+    // Cores do jogo
+    private final Color FUNDO = new Color(10, 15, 30);
+    private final Color PAREDE = new Color(35, 55, 100);
+    private final Color CHAO = new Color(12, 18, 35);
 
-    private int maxSteps;
-    private int currentSteps;
+    // Mapa: 1 = parede | 0 = caminho
+    private final int[][] mapa = {
+            {1,1,1,1,1,1,1,1,1,1},
+            {1,0,0,0,1,0,0,0,0,1},
+            {1,0,1,0,1,0,1,1,0,1},
+            {1,0,1,0,0,0,0,1,0,1},
+            {1,0,1,1,1,1,0,1,0,1},
+            {1,0,0,0,0,1,0,0,0,1},
+            {1,1,1,1,0,1,1,1,0,1},
+            {1,0,0,0,0,0,0,1,0,1},
+            {1,0,1,1,1,1,0,0,0,1},
+            {1,1,1,1,1,1,1,1,1,1}
+    };
 
-    private boolean finished;
+    // Posição do jogador
+    private int jogadorX = 1;
+    private int jogadorY = 1;
+
+    // Recursos
+    private int bytes = 50;
+    private int saltos = 20;
+
+    // Inventário
+    private boolean chaveColetada = false;
+    private boolean tokenColetado = false;
+
+    // Desafios
+    private boolean firewallSuperado = false;
+    private boolean portaAberta = false;
+
+    // Controle
+    private boolean jogoFinalizado = false;
+
+    // Interface
+    private JPanel painelJogo;
+    private JLabel status;
+    private JLabel inventario;
 
     public Game() {
 
-        parser = new Parser();
+        setTitle("Labirinto das Redes");
+        setSize(850, 850);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+        setResizable(false);
 
-        maxSteps = 20;
-        currentSteps = 0;
-        finished = false;
-
-        createRooms();
+        criarInterface();
+        configurarTeclas();
     }
 
-    private void createRooms() {
+    // ==============================
+    // INTERFACE
+    // ==============================
 
-        Room inicio = new Room("Ponto de Origem");
-        Room switches = new Room("Sala dos Switches");
-        Room servidores = new Room("Central de Servidores");
+    private void criarInterface() {
 
-        LockedRoom firewall =
-                new LockedRoom("Firewall", "token");
+        setLayout(new BorderLayout());
 
-        Room gateway =
-                new Room("Gateway de Saída para a Nuvem");
+        status = new JLabel("", SwingConstants.CENTER);
 
-        inicio.setExit("leste", switches);
+        status.setFont(new Font("Arial", Font.BOLD, 20));
+        status.setForeground(Color.WHITE);
+        status.setBackground(FUNDO);
+        status.setOpaque(true);
+        status.setPreferredSize(new Dimension(850, 55));
 
-        switches.setExit("oeste", inicio);
-        switches.setExit("leste", servidores);
+        inventario = new JLabel("", SwingConstants.CENTER);
 
-        servidores.setExit("oeste", switches);
-        servidores.setExit("norte", firewall);
+        inventario.setFont(new Font("Arial", Font.BOLD, 16));
+        inventario.setForeground(Color.CYAN);
+        inventario.setBackground(new Color(20, 30, 55));
+        inventario.setOpaque(true);
+        inventario.setPreferredSize(new Dimension(850, 55));
 
-        firewall.setExit("sul", servidores);
-        firewall.setExit("leste", gateway);
+        painelJogo = new JPanel() {
 
-        gateway.setExit("oeste", firewall);
+            @Override
+            protected void paintComponent(Graphics g) {
 
-        switches.addItem(new Item(
-                "token",
-                "Token de autenticação",
-                10
-        ));
+                super.paintComponent(g);
 
-        switches.addItem(new Item(
-                "ping",
-                "Ping de diagnóstico",
-                5
-        ));
+                desenharMapa(g);
+                desenharItens(g);
+                desenharJogador(g);
+            }
+        };
 
-        servidores.addItem(new Item(
-                "chave",
-                "Chave de segurança",
-                20
-        ));
+        painelJogo.setPreferredSize(new Dimension(700, 700));
+        painelJogo.setBackground(FUNDO);
 
-        servidores.addItem(new Item(
-                "log",
-                "Log corrompido",
-                15
-        ));
+        add(status, BorderLayout.NORTH);
+        add(painelJogo, BorderLayout.CENTER);
+        add(inventario, BorderLayout.SOUTH);
 
-        player = new Player(inicio, 50);
+        atualizarInterface();
     }
 
-    public void play() {
+    // ==============================
+    // DESENHAR MAPA
+    // ==============================
 
-        printWelcome();
+    private void desenharMapa(Graphics g) {
 
-        while (!finished) {
+        for (int y = 0; y < mapa.length; y++) {
 
-            Command command = parser.getCommand();
+            for (int x = 0; x < mapa[y].length; x++) {
 
-            processCommand(command);
-        }
-    }
-
-    private void processCommand(Command command) {
-
-        if (command.isUnknown()) {
-            System.out.println("Comando desconhecido.");
-            return;
-        }
-
-        String action = command.getCommandWord();
-
-        switch (action) {
-
-            case "ajuda":
-                printHelp();
-                break;
-
-            case "ir":
-                goRoom(command);
-                break;
-
-            case "pegar":
-
-                if (command.hasSecondWord()) {
-                    player.takeItem(command.getSecondWord());
+                if (mapa[y][x] == 1) {
+                    g.setColor(PAREDE);
                 } else {
-                    System.out.println("Pegar o quê?");
+                    g.setColor(CHAO);
                 }
 
-                break;
-
-            case "solta":
-
-                if (command.hasSecondWord()) {
-                    player.dropItem(command.getSecondWord());
-                } else {
-                    System.out.println("Soltar o quê?");
-                }
-
-                break;
-
-            case "inventario":
-                System.out.println(player.getInventoryString());
-                break;
-
-            case "usar":
-
-                if (command.hasSecondWord()) {
-                    player.useItem(command.getSecondWord());
-                } else {
-                    System.out.println("Usar o quê?");
-                }
-
-                break;
-
-            case "olhar":
-                System.out.println(
-                        player.getCurrentRoom().getLongDescription()
+                g.fillRect(
+                        x * TILE_SIZE,
+                        y * TILE_SIZE,
+                        TILE_SIZE,
+                        TILE_SIZE
                 );
-                break;
 
-            case "sair":
-                finished = true;
-                System.out.println("Você saiu do jogo.");
-                break;
+                g.setColor(new Color(45, 65, 90));
 
-            default:
-                System.out.println("Comando inválido.");
+                g.drawRect(
+                        x * TILE_SIZE,
+                        y * TILE_SIZE,
+                        TILE_SIZE,
+                        TILE_SIZE
+                );
+            }
         }
     }
 
-    private void goRoom(Command command) {
+    // ==============================
+    // DESENHAR ITENS E DESAFIOS
+    // ==============================
 
-        if (!command.hasSecondWord()) {
-            System.out.println("Ir para onde?");
-            return;
-        }
+    private void desenharItens(Graphics g) {
 
-        boolean moved =
-                player.goRoom(command.getSecondWord());
+        // Chave
+        if (!chaveColetada) {
 
-        if (moved) {
+            g.setColor(Color.YELLOW);
 
-            currentSteps++;
-
-            System.out.println(
-                    "Saltos: " + currentSteps + "/" + maxSteps
+            g.fillOval(
+                    3 * TILE_SIZE + 22,
+                    1 * TILE_SIZE + 22,
+                    25,
+                    25
             );
 
-            if (player.getCurrentRoom().getDescription()
-                    .equals("Gateway de Saída para a Nuvem")
-                    && player.hasItem("chave")) {
+            g.fillRect(
+                    3 * TILE_SIZE + 40,
+                    1 * TILE_SIZE + 30,
+                    18,
+                    8
+            );
+        }
 
-                winGame();
-                return;
+        // Firewall
+        if (!firewallSuperado) {
+
+            g.setColor(Color.RED);
+
+            g.fillRect(
+                    4 * TILE_SIZE + 8,
+                    6 * TILE_SIZE + 8,
+                    54,
+                    54
+            );
+
+            g.setColor(Color.WHITE);
+
+            g.setFont(new Font("Arial", Font.BOLD, 13));
+
+            g.drawString(
+                    "FW",
+                    4 * TILE_SIZE + 23,
+                    6 * TILE_SIZE + 41
+            );
+        }
+
+        // Porta
+        if (!portaAberta) {
+
+            g.setColor(new Color(180, 120, 20));
+
+            g.fillRect(
+                    4 * TILE_SIZE + 8,
+                    7 * TILE_SIZE + 8,
+                    54,
+                    54
+            );
+
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("Arial", Font.BOLD, 13));
+
+            g.drawString(
+                    "LOCK",
+                    4 * TILE_SIZE + 13,
+                    7 * TILE_SIZE + 40
+            );
+        }
+
+        // Token
+        if (!tokenColetado) {
+
+            g.setColor(Color.CYAN);
+
+            g.fillOval(
+                    6 * TILE_SIZE + 18,
+                    7 * TILE_SIZE + 18,
+                    34,
+                    34
+            );
+
+            g.setColor(Color.BLACK);
+            g.setFont(new Font("Arial", Font.BOLD, 15));
+
+            g.drawString(
+                    "T",
+                    6 * TILE_SIZE + 30,
+                    7 * TILE_SIZE + 41
+            );
+        }
+
+        // Gateway
+        g.setColor(Color.GREEN);
+
+        g.fillRect(
+                8 * TILE_SIZE + 10,
+                8 * TILE_SIZE + 10,
+                50,
+                50
+        );
+
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Arial", Font.BOLD, 12));
+
+        g.drawString(
+                "GW",
+                8 * TILE_SIZE + 23,
+                8 * TILE_SIZE + 40
+        );
+    }
+
+    // ==============================
+    // DESENHAR JOGADOR
+    // ==============================
+
+    private void desenharJogador(Graphics g) {
+
+        g.setColor(Color.CYAN);
+
+        g.fillOval(
+                jogadorX * TILE_SIZE + 15,
+                jogadorY * TILE_SIZE + 15,
+                40,
+                40
+        );
+
+        g.setColor(Color.WHITE);
+
+        g.fillOval(
+                jogadorX * TILE_SIZE + 24,
+                jogadorY * TILE_SIZE + 25,
+                7,
+                7
+        );
+
+        g.fillOval(
+                jogadorX * TILE_SIZE + 40,
+                jogadorY * TILE_SIZE + 25,
+                7,
+                7
+        );
+    }
+
+    // ==============================
+    // CONTROLES DO TECLADO
+    // ==============================
+
+    private void configurarTeclas() {
+
+        InputMap mapaTeclas = getRootPane().getInputMap(
+                JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
+
+        ActionMap acoes = getRootPane().getActionMap();
+
+        mapaTeclas.put(KeyStroke.getKeyStroke("UP"), "cima");
+        mapaTeclas.put(KeyStroke.getKeyStroke("DOWN"), "baixo");
+        mapaTeclas.put(KeyStroke.getKeyStroke("LEFT"), "esquerda");
+        mapaTeclas.put(KeyStroke.getKeyStroke("RIGHT"), "direita");
+
+        mapaTeclas.put(KeyStroke.getKeyStroke("W"), "cima");
+        mapaTeclas.put(KeyStroke.getKeyStroke("S"), "baixo");
+        mapaTeclas.put(KeyStroke.getKeyStroke("A"), "esquerda");
+        mapaTeclas.put(KeyStroke.getKeyStroke("D"), "direita");
+
+        acoes.put("cima", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                moverJogador(jogadorX, jogadorY - 1);
             }
+        });
 
-            if (currentSteps >= maxSteps) {
-                gameOver();
+        acoes.put("baixo", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                moverJogador(jogadorX, jogadorY + 1);
+            }
+        });
+
+        acoes.put("esquerda", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                moverJogador(jogadorX - 1, jogadorY);
+            }
+        });
+
+        acoes.put("direita", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                moverJogador(jogadorX + 1, jogadorY);
+            }
+        });
+    }
+
+    // ==============================
+    // MOVIMENTAÇÃO
+    // ==============================
+
+    private void moverJogador(int x, int y) {
+
+        if (jogoFinalizado) {
+            return;
+        }
+
+        if (x < 0 || y < 0 ||
+                y >= mapa.length ||
+                x >= mapa[0].length) {
+            return;
+        }
+
+        if (mapa[y][x] == 1) {
+            return;
+        }
+
+        // Verificar porta
+        if (x == 4 && y == 7 && !chaveColetada) {
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "PORTA BLOQUEADA!\nEncontre a chave de acesso.",
+                    "Acesso negado",
+                    JOptionPane.WARNING_MESSAGE
+            );
+
+            return;
+        }
+
+        if (x == 4 && y == 7) {
+            portaAberta = true;
+        }
+
+        // Consumir recursos
+        jogadorX = x;
+        jogadorY = y;
+
+        bytes--;
+        saltos--;
+
+        // Coletar chave
+        if (x == 3 && y == 1 && !chaveColetada) {
+
+            chaveColetada = true;
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "CHAVE COLETADA!\nAgora você pode abrir a porta.",
+                    "Novo item",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+        }
+
+        // Firewall
+        if (x == 4 && y == 6 && !firewallSuperado) {
+
+            firewallSuperado = true;
+
+            bytes -= 3;
+            saltos--;
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "FIREWALL DETECTADO!\n"
+                            + "Você conseguiu atravessar!\n"
+                            + "Foram consumidos 3 bytes extras e 1 salto.",
+                    "Desafio de segurança",
+                    JOptionPane.WARNING_MESSAGE
+            );
+        }
+
+        // Coletar token
+        if (x == 6 && y == 7 && !tokenColetado) {
+
+            tokenColetado = true;
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    "TOKEN DE ACESSO COLETADO!\n"
+                            + "Agora você pode acessar o Gateway.",
+                    "Token adquirido",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+        }
+
+        atualizarInterface();
+        painelJogo.repaint();
+
+        // Verificar recursos
+        if (bytes <= 0 || saltos <= 0) {
+
+            finalizarJogo(false);
+            return;
+        }
+
+        // Verificar Gateway
+        if (jogadorX == 8 && jogadorY == 8) {
+
+            if (tokenColetado) {
+                finalizarJogo(true);
+            } else {
+
+                JOptionPane.showMessageDialog(
+                        this,
+                        "GATEWAY BLOQUEADO!\n"
+                                + "Você precisa encontrar o token.",
+                        "Acesso negado",
+                        JOptionPane.WARNING_MESSAGE
+                );
             }
         }
     }
 
-    private void printWelcome() {
+    // ==============================
+    // ATUALIZAR INTERFACE
+    // ==============================
 
-        System.out.println("================================");
-        System.out.println("       LABIRINTO DAS REDES");
-        System.out.println("================================");
+    private void atualizarInterface() {
 
-        System.out.println(
-                "Um ataque de Ransomware foi detectado!"
+        status.setText(
+                " BYTES: " + bytes +
+                        "       SALTOS: " + saltos
         );
 
-        System.out.println(
-                "Encontre a chave e alcance o Gateway!"
+        String chave = chaveColetada ? "SIM" : "NÃO";
+        String token = tokenColetado ? "SIM" : "NÃO";
+
+        inventario.setText(
+                " CHAVE: " + chave +
+                        "       TOKEN: " + token
+        );
+    }
+
+    // ==============================
+    // FINALIZAR JOGO
+    // ==============================
+
+    private void finalizarJogo(boolean venceu) {
+
+        jogoFinalizado = true;
+
+        String mensagem;
+
+        if (venceu) {
+
+            mensagem = "PARABÉNS!\n\n"
+                    + "Você atravessou o labirinto!\n"
+                    + "O Gateway foi desbloqueado!\n\n"
+                    + "Bytes restantes: " + bytes;
+
+        } else {
+
+            mensagem = "FIM DE JOGO!\n\n"
+                    + "Seus recursos acabaram.\n"
+                    + "Tente novamente!";
+        }
+
+        int opcao = JOptionPane.showConfirmDialog(
+                this,
+                mensagem + "\n\nDeseja jogar novamente?",
+                "Labirinto das Redes",
+                JOptionPane.YES_NO_OPTION
         );
 
-        System.out.println(
-                player.getCurrentRoom().getLongDescription()
-        );
+        if (opcao == JOptionPane.YES_OPTION) {
 
-        printHelp();
+            reiniciarJogo();
+
+        } else {
+
+            dispose();
+        }
     }
 
-    private void printHelp() {
+    // ==============================
+    // REINICIAR PARTIDA
+    // ==============================
 
-        System.out.println("\nComandos disponíveis:");
+    private void reiniciarJogo() {
 
-        parser.showCommands();
+        jogadorX = 1;
+        jogadorY = 1;
 
-        System.out.println("\nExemplo: ir leste");
+        bytes = 50;
+        saltos = 20;
+
+        chaveColetada = false;
+        tokenColetado = false;
+
+        firewallSuperado = false;
+        portaAberta = false;
+
+        jogoFinalizado = false;
+
+        atualizarInterface();
+        painelJogo.repaint();
     }
 
-    private void winGame() {
+    // ==============================
+    // INICIAR JOGO
+    // ==============================
 
-        finished = true;
+    public static void iniciar() {
 
-        System.out.println("\nPARABÉNS! VOCÊ VENCEU!");
-        System.out.println("A chave foi encontrada.");
-        System.out.println("Você alcançou o Gateway!");
-    }
+        SwingUtilities.invokeLater(() -> {
 
-    private void gameOver() {
+            Game jogo = new Game();
+            jogo.setVisible(true);
 
-        finished = true;
-
-        System.out.println("\nGAME OVER!");
-        System.out.println("O limite de saltos foi atingido.");
-        System.out.println("O sistema foi criptografado.");
+        });
     }
 }
