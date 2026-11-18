@@ -21,8 +21,8 @@ public class Game extends JFrame {
             {1,0,1,1,1,1,0,1,0,1},
             {1,0,0,0,0,1,0,0,0,1},
             {1,1,1,1,0,1,1,1,0,1},
-            {1,0,0,0,0,0,0,1,0,1},
-            {1,0,1,1,1,1,0,0,0,1},
+            {1,0,0,0,0,0,0,0,0,1},
+            {1,0,1,1,1,1,0,1,0,1},
             {1,1,1,1,1,1,1,1,1,1}
     };
 
@@ -150,7 +150,7 @@ public class Game extends JFrame {
 
     private void desenharItens(Graphics g) {
 
-        // Chave
+        // Chave de acesso
         if (!chaveColetada) {
 
             g.setColor(Color.YELLOW);
@@ -183,7 +183,6 @@ public class Game extends JFrame {
             );
 
             g.setColor(Color.WHITE);
-
             g.setFont(new Font("Arial", Font.BOLD, 13));
 
             g.drawString(
@@ -193,13 +192,13 @@ public class Game extends JFrame {
             );
         }
 
-        // Porta
+        // Porta de segurança
         if (!portaAberta) {
 
             g.setColor(new Color(180, 120, 20));
 
             g.fillRect(
-                    4 * TILE_SIZE + 8,
+                    8 * TILE_SIZE + 8,
                     7 * TILE_SIZE + 8,
                     54,
                     54
@@ -210,12 +209,12 @@ public class Game extends JFrame {
 
             g.drawString(
                     "LOCK",
-                    4 * TILE_SIZE + 13,
+                    8 * TILE_SIZE + 13,
                     7 * TILE_SIZE + 40
             );
         }
 
-        // Token
+        // Token de segurança
         if (!tokenColetado) {
 
             g.setColor(Color.CYAN);
@@ -346,54 +345,90 @@ public class Game extends JFrame {
             return;
         }
 
+        // Verificar limites do mapa
         if (x < 0 || y < 0 ||
                 y >= mapa.length ||
                 x >= mapa[0].length) {
             return;
         }
 
+        // Verificar paredes
         if (mapa[y][x] == 1) {
             return;
         }
 
-        // Verificar porta
-        if (x == 4 && y == 7 && !chaveColetada) {
+        // Verificar porta de segurança
+        if (x == 8 && y == 7 && !portaAberta) {
+
+            if (!chaveColetada ||
+                    !firewallSuperado ||
+                    !tokenColetado) {
+
+                String faltando = "PORTA BLOQUEADA!\n\n";
+
+                if (!chaveColetada) {
+                    faltando += "- Chave de acesso\n";
+                }
+
+                if (!firewallSuperado) {
+                    faltando += "- Firewall superado\n";
+                }
+
+                if (!tokenColetado) {
+                    faltando += "- Token de segurança\n";
+                }
+
+                JOptionPane.showMessageDialog(
+                        this,
+                        faltando,
+                        "Acesso negado",
+                        JOptionPane.WARNING_MESSAGE
+                );
+
+                return;
+            }
+
+            portaAberta = true;
 
             JOptionPane.showMessageDialog(
                     this,
-                    "PORTA BLOQUEADA!\nEncontre a chave de acesso.",
-                    "Acesso negado",
-                    JOptionPane.WARNING_MESSAGE
+                    "PORTA DESBLOQUEADA!\n"
+                            + "Todos os requisitos foram cumpridos.\n"
+                            + "Acesso ao Gateway liberado!",
+                    "Segurança",
+                    JOptionPane.INFORMATION_MESSAGE
             );
-
-            return;
         }
 
-        if (x == 4 && y == 7) {
-            portaAberta = true;
-        }
-
-        // Consumir recursos
+        // Atualizar posição
         jogadorX = x;
         jogadorY = y;
 
+        // Consumir recursos
         bytes--;
         saltos--;
 
-        // Coletar chave
+        // ==============================
+        // COLETAR CHAVE
+        // ==============================
+
         if (x == 3 && y == 1 && !chaveColetada) {
 
             chaveColetada = true;
 
             JOptionPane.showMessageDialog(
                     this,
-                    "CHAVE COLETADA!\nAgora você pode abrir a porta.",
+                    "CHAVE COLETADA!\n"
+                            + "Agora você pode continuar sua jornada.",
                     "Novo item",
                     JOptionPane.INFORMATION_MESSAGE
             );
         }
 
-        // Firewall
+        // ==============================
+        // FIREWALL
+        // ==============================
+
         if (x == 4 && y == 6 && !firewallSuperado) {
 
             firewallSuperado = true;
@@ -411,7 +446,10 @@ public class Game extends JFrame {
             );
         }
 
-        // Coletar token
+        // ==============================
+        // COLETAR TOKEN
+        // ==============================
+
         if (x == 6 && y == 7 && !tokenColetado) {
 
             tokenColetado = true;
@@ -419,7 +457,7 @@ public class Game extends JFrame {
             JOptionPane.showMessageDialog(
                     this,
                     "TOKEN DE ACESSO COLETADO!\n"
-                            + "Agora você pode acessar o Gateway.",
+                            + "Agora você possui o token de segurança.",
                     "Token adquirido",
                     JOptionPane.INFORMATION_MESSAGE
             );
@@ -428,24 +466,35 @@ public class Game extends JFrame {
         atualizarInterface();
         painelJogo.repaint();
 
-        // Verificar recursos
+        // ==============================
+        // VERIFICAR RECURSOS
+        // ==============================
+
         if (bytes <= 0 || saltos <= 0) {
 
             finalizarJogo(false);
             return;
         }
 
-        // Verificar Gateway
+        // ==============================
+        // VERIFICAR GATEWAY
+        // ==============================
+
         if (jogadorX == 8 && jogadorY == 8) {
 
-            if (tokenColetado) {
+            if (chaveColetada &&
+                    firewallSuperado &&
+                    tokenColetado &&
+                    portaAberta) {
+
                 finalizarJogo(true);
+
             } else {
 
                 JOptionPane.showMessageDialog(
                         this,
                         "GATEWAY BLOQUEADO!\n"
-                                + "Você precisa encontrar o token.",
+                                + "Você precisa cumprir todos os desafios.",
                         "Acesso negado",
                         JOptionPane.WARNING_MESSAGE
                 );
