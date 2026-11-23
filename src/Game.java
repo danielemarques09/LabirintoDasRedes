@@ -591,7 +591,7 @@ public class Game extends JFrame {
     // INICIAR JOGO
     // ==============================
 
-    public static void iniciar() {
+    public static void play() {
 
         SwingUtilities.invokeLater(() -> {
 
