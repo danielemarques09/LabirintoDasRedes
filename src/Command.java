@@ -1,6 +1,3 @@
-
-package command;
-
 public class Command {
 
     private String commandWord;

@@ -1,10 +1,5 @@
-
-package room;
-
 import java.util.HashMap;
 import java.util.Map;
-
-import item.Item;
 
 public class Room {
 

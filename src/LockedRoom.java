@@ -1,9 +1,3 @@
-
-package lockedroom;
-
-import player.Player;
-import room.Room;
-
 public class LockedRoom extends Room {
 
     private String requiredKeyName;

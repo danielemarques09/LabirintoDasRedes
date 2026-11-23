@@ -1,12 +1,5 @@
-
-package player;
-
 import java.util.ArrayList;
 import java.util.List;
-
-import item.Item;
-import room.Room;
-import lockedroom.LockedRoom;
 
 public class Player {
 
