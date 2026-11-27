@@ -1,3 +1,4 @@
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -5,18 +6,16 @@ public class Player {
 
     private Room currentRoom;
 
-    private List<Item> inventory;
+    private final List<Item> inventory;
 
-    private int maxWeight;
+    private final int maxWeight;
     private int currentWeight;
 
-    public Player(Room startingRoom, int maxWeight) {
-
-        this.currentRoom = startingRoom;
-        this.maxWeight = maxWeight;
-        this.currentWeight = 0;
-
+    public Player(Room startingRoom) {
+        currentRoom = startingRoom;
         inventory = new ArrayList<>();
+        maxWeight = 50;
+        currentWeight = 0;
     }
 
     public boolean goRoom(String direction) {
@@ -24,102 +23,100 @@ public class Player {
         Room nextRoom = currentRoom.getExit(direction);
 
         if (nextRoom == null) {
-
-            System.out.println("Não existe saída nessa direção.");
-
             return false;
         }
 
-        if (nextRoom instanceof LockedRoom) {
-
-            LockedRoom lockedRoom = (LockedRoom) nextRoom;
-
-            if (!lockedRoom.unlock(this)) {
-                return false;
-            }
+        if (!nextRoom.canEnter(this)) {
+            return false;
         }
 
         currentRoom = nextRoom;
-
-        System.out.println(currentRoom.getLongDescription());
-
         return true;
     }
 
-    public boolean takeItem(String itemName) {
+    public void setCurrentRoom(Room room) {
+        currentRoom = room;
+    }
 
-        Item item = currentRoom.getItem(itemName);
+    public Room getCurrentRoom() {
+        return currentRoom;
+    }
+
+    public boolean takeItem(String name) {
+
+        Item item = currentRoom.getItem(name);
 
         if (item == null) {
-
-            System.out.println("Esse item não existe nesta sala.");
-
             return false;
         }
 
         if (currentWeight + item.getWeight() > maxWeight) {
-
-            System.out.println("Limite de bytes excedido!");
-
-            System.out.println(
-                    "Peso atual: " + currentWeight +
-                            "/" + maxWeight + " bytes."
-            );
-
             return false;
         }
 
-        currentRoom.removeItem(itemName);
-
         inventory.add(item);
-
         currentWeight += item.getWeight();
 
-        System.out.println("Você pegou: " + item.getName());
-
-        System.out.println(
-                "Peso atual: " + currentWeight +
-                        "/" + maxWeight + " bytes."
-        );
+        currentRoom.removeItem(name);
 
         return true;
     }
 
-    public boolean dropItem(String itemName) {
+    public boolean dropItem(String name) {
 
-        for (int i = 0; i < inventory.size(); i++) {
+        Item found = getItem(name);
 
-            Item item = inventory.get(i);
-
-            if (item.getName().equalsIgnoreCase(itemName)) {
-
-                inventory.remove(i);
-
-                currentWeight -= item.getWeight();
-
-                currentRoom.addItem(item);
-
-                System.out.println("Você soltou: " + item.getName());
-
-                return true;
-            }
+        if (found == null) {
+            return false;
         }
 
-        System.out.println("Você não possui esse item.");
+        inventory.remove(found);
+        currentWeight -= found.getWeight();
 
-        return false;
+        currentRoom.addItem(found);
+
+        return true;
     }
 
-    public boolean hasItem(String itemName) {
+    public boolean hasItem(String name) {
+        return getItem(name) != null;
+    }
+
+    public Item getItem(String name) {
 
         for (Item item : inventory) {
-
-            if (item.getName().equalsIgnoreCase(itemName)) {
-                return true;
+            if (item.getName().equalsIgnoreCase(name)) {
+                return item;
             }
         }
 
-        return false;
+        return null;
+    }
+
+    public boolean consumeItem(String name) {
+
+        Item item = getItem(name);
+
+        if (item == null) {
+            return false;
+        }
+
+        inventory.remove(item);
+        currentWeight -= item.getWeight();
+
+        return true;
+    }
+
+    public int getCurrentWeight() {
+        return currentWeight;
+    }
+
+    public int getMaxWeight() {
+        return maxWeight;
+    }
+
+    public List<Item> getInventory() {
+        return new ArrayList<>(inventory);
     }
 
     public String getInventoryString() {
@@ -130,66 +127,15 @@ public class Player {
 
         StringBuilder result = new StringBuilder();
 
-        result.append("\nINVENTÁRIO:");
-
         for (Item item : inventory) {
-
-            result.append("\n- ")
-                    .append(item.getName())
-                    .append(" (")
-                    .append(item.getWeight())
-                    .append(" bytes)");
+            result.append(item.toString()).append("\n");
         }
 
-        result.append("\nPeso total: ")
+        result.append("\nPeso: ")
                 .append(currentWeight)
                 .append("/")
-                .append(maxWeight)
-                .append(" bytes.");
+                .append(maxWeight);
 
         return result.toString();
-    }
-
-    public boolean useItem(String itemName) {
-
-        if (!hasItem(itemName)) {
-
-            System.out.println("Você não possui esse item.");
-
-            return false;
-        }
-
-        for (String direction :
-                new String[]{"norte", "sul", "leste", "oeste"}) {
-
-            Room nextRoom = currentRoom.getExit(direction);
-
-            if (nextRoom instanceof LockedRoom) {
-
-                LockedRoom lockedRoom = (LockedRoom) nextRoom;
-
-                if (lockedRoom.getRequiredKeyName()
-                        .equalsIgnoreCase(itemName)) {
-
-                    return lockedRoom.unlock(this);
-                }
-            }
-        }
-
-        System.out.println("Não é possível utilizar esse item aqui.");
-
-        return false;
-    }
-
-    public Room getCurrentRoom() {
-        return currentRoom;
-    }
-
-    public int getCurrentWeight() {
-        return currentWeight;
-    }
-
-    public int getMaxWeight() {
-        return maxWeight;
     }
 }

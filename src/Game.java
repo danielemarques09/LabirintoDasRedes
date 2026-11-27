@@ -1,603 +1,278 @@
 
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.List;
 
-public class Game extends JFrame {
+public class Game {
 
-    private final int TILE_SIZE = 70;
+    private Player player;
+    private List<Room> rooms;
 
-    // Cores do jogo
-    private final Color FUNDO = new Color(10, 15, 30);
-    private final Color PAREDE = new Color(35, 55, 100);
-    private final Color CHAO = new Color(12, 18, 35);
+    private int currentSteps;
+    private final int maxSteps = 100;
 
-    // Mapa: 1 = parede | 0 = caminho
-    private final int[][] mapa = {
-            {1,1,1,1,1,1,1,1,1,1},
-            {1,0,0,0,1,0,0,0,0,1},
-            {1,0,1,0,1,0,1,1,0,1},
-            {1,0,1,0,0,0,0,1,0,1},
-            {1,0,1,1,1,1,0,1,0,1},
-            {1,0,0,0,0,1,0,0,0,1},
-            {1,1,1,1,0,1,1,1,0,1},
-            {1,0,0,0,0,0,0,0,0,1},
-            {1,0,1,1,1,1,0,1,0,1},
-            {1,1,1,1,1,1,1,1,1,1}
-    };
+    private final long startTime;
+    private final long timeLimit = 180000;
 
-    // Posição do jogador
-    private int jogadorX = 1;
-    private int jogadorY = 1;
-
-    // Recursos
-    private int bytes = 50;
-    private int saltos = 20;
-
-    // Inventário
-    private boolean chaveColetada = false;
-    private boolean tokenColetado = false;
-
-    // Desafios
-    private boolean firewallSuperado = false;
-    private boolean portaAberta = false;
-
-    // Controle
-    private boolean jogoFinalizado = false;
-
-    // Interface
-    private JPanel painelJogo;
-    private JLabel status;
-    private JLabel inventario;
+    private boolean finished;
+    private String status;
 
     public Game() {
 
-        setTitle("Labirinto das Redes");
-        setSize(850, 850);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLocationRelativeTo(null);
-        setResizable(false);
+        currentSteps = 0;
+        finished = false;
+        status = "Encontre os itens e chegue ao Gateway.";
 
-        criarInterface();
-        configurarTeclas();
+        startTime = System.currentTimeMillis();
+
+        createRooms();
     }
 
-    // ==============================
-    // INTERFACE
-    // ==============================
+    private void createRooms() {
 
-    private void criarInterface() {
+        rooms = new ArrayList<>();
 
-        setLayout(new BorderLayout());
+        Room start = new Room("Sala inicial - Estação de trabalho");
+        Room corridor = new Room("Corredor principal da rede");
+        Room switchRoom = new Room("Sala do Switch");
+        LockedRoom firewall = new LockedRoom(
+                "Sala protegida pelo Firewall",
+                "token"
+        );
+        Room server = new Room("Sala dos Servidores");
+        LockedRoom gateway = new LockedRoom(
+                "Gateway principal",
+                "chave"
+        );
 
-        status = new JLabel("", SwingConstants.CENTER);
+        start.setExit("leste", corridor);
 
-        status.setFont(new Font("Arial", Font.BOLD, 20));
-        status.setForeground(Color.WHITE);
-        status.setBackground(FUNDO);
-        status.setOpaque(true);
-        status.setPreferredSize(new Dimension(850, 55));
+        corridor.setExit("oeste", start);
+        corridor.setExit("leste", switchRoom);
 
-        inventario = new JLabel("", SwingConstants.CENTER);
+        switchRoom.setExit("oeste", corridor);
+        switchRoom.setExit("sul", firewall);
 
-        inventario.setFont(new Font("Arial", Font.BOLD, 16));
-        inventario.setForeground(Color.CYAN);
-        inventario.setBackground(new Color(20, 30, 55));
-        inventario.setOpaque(true);
-        inventario.setPreferredSize(new Dimension(850, 55));
+        firewall.setExit("norte", switchRoom);
+        firewall.setExit("leste", server);
 
-        painelJogo = new JPanel() {
+        server.setExit("oeste", firewall);
+        server.setExit("leste", gateway);
 
-            @Override
-            protected void paintComponent(Graphics g) {
+        gateway.setExit("oeste", server);
 
-                super.paintComponent(g);
+        start.addItem(new PingItem());
+        corridor.addItem(new TokenItem());
+        switchRoom.addItem(new CorruptedLogItem());
+        server.addItem(new SecurityKey());
 
-                desenharMapa(g);
-                desenharItens(g);
-                desenharJogador(g);
-            }
-        };
+        switchRoom.setChallenge(
+                new NetworkChallenge(
+                        "Qual é o endereço IP do Gateway?",
+                        "192.168.1.1"
+                )
+        );
 
-        painelJogo.setPreferredSize(new Dimension(700, 700));
-        painelJogo.setBackground(FUNDO);
+        rooms.add(start);
+        rooms.add(corridor);
+        rooms.add(switchRoom);
+        rooms.add(firewall);
+        rooms.add(server);
+        rooms.add(gateway);
 
-        add(status, BorderLayout.NORTH);
-        add(painelJogo, BorderLayout.CENTER);
-        add(inventario, BorderLayout.SOUTH);
-
-        atualizarInterface();
+        player = new Player(start);
     }
 
-    // ==============================
-    // DESENHAR MAPA
-    // ==============================
+    public boolean enterMazeRoom(int destinationIndex) {
 
-    private void desenharMapa(Graphics g) {
-
-        for (int y = 0; y < mapa.length; y++) {
-
-            for (int x = 0; x < mapa[y].length; x++) {
-
-                if (mapa[y][x] == 1) {
-                    g.setColor(PAREDE);
-                } else {
-                    g.setColor(CHAO);
-                }
-
-                g.fillRect(
-                        x * TILE_SIZE,
-                        y * TILE_SIZE,
-                        TILE_SIZE,
-                        TILE_SIZE
-                );
-
-                g.setColor(new Color(45, 65, 90));
-
-                g.drawRect(
-                        x * TILE_SIZE,
-                        y * TILE_SIZE,
-                        TILE_SIZE,
-                        TILE_SIZE
-                );
-            }
-        }
-    }
-
-    // ==============================
-    // DESENHAR ITENS E DESAFIOS
-    // ==============================
-
-    private void desenharItens(Graphics g) {
-
-        // Chave de acesso
-        if (!chaveColetada) {
-
-            g.setColor(Color.YELLOW);
-
-            g.fillOval(
-                    3 * TILE_SIZE + 22,
-                    1 * TILE_SIZE + 22,
-                    25,
-                    25
-            );
-
-            g.fillRect(
-                    3 * TILE_SIZE + 40,
-                    1 * TILE_SIZE + 30,
-                    18,
-                    8
-            );
+        if (finished) {
+            return false;
         }
 
-        // Firewall
-        if (!firewallSuperado) {
-
-            g.setColor(Color.RED);
-
-            g.fillRect(
-                    4 * TILE_SIZE + 8,
-                    6 * TILE_SIZE + 8,
-                    54,
-                    54
-            );
-
-            g.setColor(Color.WHITE);
-            g.setFont(new Font("Arial", Font.BOLD, 13));
-
-            g.drawString(
-                    "FW",
-                    4 * TILE_SIZE + 23,
-                    6 * TILE_SIZE + 41
-            );
+        if (destinationIndex < 0 || destinationIndex >= rooms.size()) {
+            return false;
         }
 
-        // Porta de segurança
-        if (!portaAberta) {
+        Room current = player.getCurrentRoom();
+        Room destination = rooms.get(destinationIndex);
 
-            g.setColor(new Color(180, 120, 20));
-
-            g.fillRect(
-                    8 * TILE_SIZE + 8,
-                    7 * TILE_SIZE + 8,
-                    54,
-                    54
-            );
-
-            g.setColor(Color.WHITE);
-            g.setFont(new Font("Arial", Font.BOLD, 13));
-
-            g.drawString(
-                    "LOCK",
-                    8 * TILE_SIZE + 13,
-                    7 * TILE_SIZE + 40
-            );
+        if (current == destination) {
+            return true;
         }
 
-        // Token de segurança
-        if (!tokenColetado) {
-
-            g.setColor(Color.CYAN);
-
-            g.fillOval(
-                    6 * TILE_SIZE + 18,
-                    7 * TILE_SIZE + 18,
-                    34,
-                    34
-            );
-
-            g.setColor(Color.BLACK);
-            g.setFont(new Font("Arial", Font.BOLD, 15));
-
-            g.drawString(
-                    "T",
-                    6 * TILE_SIZE + 30,
-                    7 * TILE_SIZE + 41
-            );
+        if (!current.hasExitTo(destination)) {
+            status = "Esse caminho não está disponível.";
+            return false;
         }
 
-        // Gateway
-        g.setColor(Color.GREEN);
+        NetworkChallenge challenge = current.getChallenge();
 
-        g.fillRect(
-                8 * TILE_SIZE + 10,
-                8 * TILE_SIZE + 10,
-                50,
-                50
-        );
+        if (challenge != null && !challenge.isSolved()) {
+            status = "Resolva o desafio da sala antes de sair.";
+            return false;
+        }
 
-        g.setColor(Color.WHITE);
-        g.setFont(new Font("Arial", Font.BOLD, 12));
+        if (!destination.canEnter(player)) {
+            status = "Acesso bloqueado! Você precisa do item necessário.";
+            return false;
+        }
 
-        g.drawString(
-                "GW",
-                8 * TILE_SIZE + 23,
-                8 * TILE_SIZE + 40
-        );
+        player.setCurrentRoom(destination);
+        currentSteps++;
+
+        status = "Você entrou em: " + destination.getDescription();
+
+        if (destination == rooms.get(5)) {
+            victory();
+        }
+
+        checkLimits();
+
+        return !finished;
     }
 
-    // ==============================
-    // DESENHAR JOGADOR
-    // ==============================
+    public void countMovement() {
 
-    private void desenharJogador(Graphics g) {
-
-        g.setColor(Color.CYAN);
-
-        g.fillOval(
-                jogadorX * TILE_SIZE + 15,
-                jogadorY * TILE_SIZE + 15,
-                40,
-                40
-        );
-
-        g.setColor(Color.WHITE);
-
-        g.fillOval(
-                jogadorX * TILE_SIZE + 24,
-                jogadorY * TILE_SIZE + 25,
-                7,
-                7
-        );
-
-        g.fillOval(
-                jogadorX * TILE_SIZE + 40,
-                jogadorY * TILE_SIZE + 25,
-                7,
-                7
-        );
-    }
-
-    // ==============================
-    // CONTROLES DO TECLADO
-    // ==============================
-
-    private void configurarTeclas() {
-
-        InputMap mapaTeclas = getRootPane().getInputMap(
-                JComponent.WHEN_IN_FOCUSED_WINDOW
-        );
-
-        ActionMap acoes = getRootPane().getActionMap();
-
-        mapaTeclas.put(KeyStroke.getKeyStroke("UP"), "cima");
-        mapaTeclas.put(KeyStroke.getKeyStroke("DOWN"), "baixo");
-        mapaTeclas.put(KeyStroke.getKeyStroke("LEFT"), "esquerda");
-        mapaTeclas.put(KeyStroke.getKeyStroke("RIGHT"), "direita");
-
-        mapaTeclas.put(KeyStroke.getKeyStroke("W"), "cima");
-        mapaTeclas.put(KeyStroke.getKeyStroke("S"), "baixo");
-        mapaTeclas.put(KeyStroke.getKeyStroke("A"), "esquerda");
-        mapaTeclas.put(KeyStroke.getKeyStroke("D"), "direita");
-
-        acoes.put("cima", new AbstractAction() {
-            public void actionPerformed(ActionEvent e) {
-                moverJogador(jogadorX, jogadorY - 1);
-            }
-        });
-
-        acoes.put("baixo", new AbstractAction() {
-            public void actionPerformed(ActionEvent e) {
-                moverJogador(jogadorX, jogadorY + 1);
-            }
-        });
-
-        acoes.put("esquerda", new AbstractAction() {
-            public void actionPerformed(ActionEvent e) {
-                moverJogador(jogadorX - 1, jogadorY);
-            }
-        });
-
-        acoes.put("direita", new AbstractAction() {
-            public void actionPerformed(ActionEvent e) {
-                moverJogador(jogadorX + 1, jogadorY);
-            }
-        });
-    }
-
-    // ==============================
-    // MOVIMENTAÇÃO
-    // ==============================
-
-    private void moverJogador(int x, int y) {
-
-        if (jogoFinalizado) {
+        if (finished) {
             return;
         }
 
-        // Verificar limites do mapa
-        if (x < 0 || y < 0 ||
-                y >= mapa.length ||
-                x >= mapa[0].length) {
-            return;
-        }
-
-        // Verificar paredes
-        if (mapa[y][x] == 1) {
-            return;
-        }
-
-        // Verificar porta de segurança
-        if (x == 8 && y == 7 && !portaAberta) {
-
-            if (!chaveColetada ||
-                    !firewallSuperado ||
-                    !tokenColetado) {
-
-                String faltando = "PORTA BLOQUEADA!\n\n";
-
-                if (!chaveColetada) {
-                    faltando += "- Chave de acesso\n";
-                }
-
-                if (!firewallSuperado) {
-                    faltando += "- Firewall superado\n";
-                }
-
-                if (!tokenColetado) {
-                    faltando += "- Token de segurança\n";
-                }
-
-                JOptionPane.showMessageDialog(
-                        this,
-                        faltando,
-                        "Acesso negado",
-                        JOptionPane.WARNING_MESSAGE
-                );
-
-                return;
-            }
-
-            portaAberta = true;
-
-            JOptionPane.showMessageDialog(
-                    this,
-                    "PORTA DESBLOQUEADA!\n"
-                            + "Todos os requisitos foram cumpridos.\n"
-                            + "Acesso ao Gateway liberado!",
-                    "Segurança",
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-        }
-
-        // Atualizar posição
-        jogadorX = x;
-        jogadorY = y;
-
-        // Consumir recursos
-        bytes--;
-        saltos--;
-
-        // ==============================
-        // COLETAR CHAVE
-        // ==============================
-
-        if (x == 3 && y == 1 && !chaveColetada) {
-
-            chaveColetada = true;
-
-            JOptionPane.showMessageDialog(
-                    this,
-                    "CHAVE COLETADA!\n"
-                            + "Agora você pode continuar sua jornada.",
-                    "Novo item",
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-        }
-
-        // ==============================
-        // FIREWALL
-        // ==============================
-
-        if (x == 4 && y == 6 && !firewallSuperado) {
-
-            firewallSuperado = true;
-
-            bytes -= 3;
-            saltos--;
-
-            JOptionPane.showMessageDialog(
-                    this,
-                    "FIREWALL DETECTADO!\n"
-                            + "Você conseguiu atravessar!\n"
-                            + "Foram consumidos 3 bytes extras e 1 salto.",
-                    "Desafio de segurança",
-                    JOptionPane.WARNING_MESSAGE
-            );
-        }
-
-        // ==============================
-        // COLETAR TOKEN
-        // ==============================
-
-        if (x == 6 && y == 7 && !tokenColetado) {
-
-            tokenColetado = true;
-
-            JOptionPane.showMessageDialog(
-                    this,
-                    "TOKEN DE ACESSO COLETADO!\n"
-                            + "Agora você possui o token de segurança.",
-                    "Token adquirido",
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-        }
-
-        atualizarInterface();
-        painelJogo.repaint();
-
-        // ==============================
-        // VERIFICAR RECURSOS
-        // ==============================
-
-        if (bytes <= 0 || saltos <= 0) {
-
-            finalizarJogo(false);
-            return;
-        }
-
-        // ==============================
-        // VERIFICAR GATEWAY
-        // ==============================
-
-        if (jogadorX == 8 && jogadorY == 8) {
-
-            if (chaveColetada &&
-                    firewallSuperado &&
-                    tokenColetado &&
-                    portaAberta) {
-
-                finalizarJogo(true);
-
-            } else {
-
-                JOptionPane.showMessageDialog(
-                        this,
-                        "GATEWAY BLOQUEADO!\n"
-                                + "Você precisa cumprir todos os desafios.",
-                        "Acesso negado",
-                        JOptionPane.WARNING_MESSAGE
-                );
-            }
-        }
+        currentSteps++;
+        checkLimits();
     }
 
-    // ==============================
-    // ATUALIZAR INTERFACE
-    // ==============================
+    public boolean takeItem(String name) {
 
-    private void atualizarInterface() {
+        if (finished) {
+            return false;
+        }
 
-        status.setText(
-                " BYTES: " + bytes +
-                        "       SALTOS: " + saltos
-        );
+        boolean result = player.takeItem(name);
 
-        String chave = chaveColetada ? "SIM" : "NÃO";
-        String token = tokenColetado ? "SIM" : "NÃO";
-
-        inventario.setText(
-                " CHAVE: " + chave +
-                        "       TOKEN: " + token
-        );
-    }
-
-    // ==============================
-    // FINALIZAR JOGO
-    // ==============================
-
-    private void finalizarJogo(boolean venceu) {
-
-        jogoFinalizado = true;
-
-        String mensagem;
-
-        if (venceu) {
-
-            mensagem = "PARABÉNS!\n\n"
-                    + "Você atravessou o labirinto!\n"
-                    + "O Gateway foi desbloqueado!\n\n"
-                    + "Bytes restantes: " + bytes;
-
+        if (result) {
+            status = "Item coletado: " + name;
         } else {
-
-            mensagem = "FIM DE JOGO!\n\n"
-                    + "Seus recursos acabaram.\n"
-                    + "Tente novamente!";
+            status = "Não foi possível pegar esse item. Confira o nome e o peso.";
         }
 
-        int opcao = JOptionPane.showConfirmDialog(
-                this,
-                mensagem + "\n\nDeseja jogar novamente?",
-                "Labirinto das Redes",
-                JOptionPane.YES_NO_OPTION
-        );
+        return result;
+    }
 
-        if (opcao == JOptionPane.YES_OPTION) {
+    public boolean dropItem(String name) {
 
-            reiniciarJogo();
+        if (finished) {
+            return false;
+        }
 
-        } else {
+        boolean result = player.dropItem(name);
 
-            dispose();
+        status = result
+                ? "Item solto: " + name
+                : "Você não possui esse item.";
+
+        return result;
+    }
+
+    public void usePing() {
+
+        if (finished) {
+            return;
+        }
+
+        if (!player.hasItem("ping")) {
+            status = "Você não possui o item Ping.";
+            return;
+        }
+
+        status = "Ping realizado! Verifique a conexão com o Gateway: 192.168.1.1.";
+    }
+
+    public boolean solveChallenge(String answer) {
+
+        if (finished) {
+            return false;
+        }
+
+        NetworkChallenge challenge =
+                player.getCurrentRoom().getChallenge();
+
+        if (challenge == null) {
+            status = "Não existe desafio nesta sala.";
+            return false;
+        }
+
+        if (challenge.checkAnswer(answer)) {
+            status = "Resposta correta! O caminho está liberado.";
+            return true;
+        }
+
+        status = "Resposta incorreta. Tente novamente.";
+        return false;
+    }
+
+    private void checkLimits() {
+
+        if (currentSteps >= maxSteps) {
+            gameOver("Você ultrapassou o limite de movimentos.");
+            return;
+        }
+
+        if (System.currentTimeMillis() - startTime >= timeLimit) {
+            gameOver("O tempo acabou! A rede foi comprometida.");
         }
     }
 
-    // ==============================
-    // REINICIAR PARTIDA
-    // ==============================
+    private void victory() {
 
-    private void reiniciarJogo() {
-
-        jogadorX = 1;
-        jogadorY = 1;
-
-        bytes = 50;
-        saltos = 20;
-
-        chaveColetada = false;
-        tokenColetado = false;
-
-        firewallSuperado = false;
-        portaAberta = false;
-
-        jogoFinalizado = false;
-
-        atualizarInterface();
-        painelJogo.repaint();
+        finished = true;
+        status = "PARABÉNS! Você chegou ao Gateway e concluiu a missão!";
     }
 
-    // ==============================
-    // INICIAR JOGO
-    // ==============================
+    private void gameOver(String message) {
+        finished = true;
+        status = message;
+    }
 
-    public static void play() {
+    public int getRemainingSeconds() {
 
-        SwingUtilities.invokeLater(() -> {
+        long elapsed = System.currentTimeMillis() - startTime;
+        long remaining = Math.max(0, timeLimit - elapsed);
 
-            Game jogo = new Game();
-            jogo.setVisible(true);
+        if (remaining == 0 && !finished) {
+            gameOver("O tempo acabou! A rede foi comprometida.");
+        }
 
-        });
+        return (int) (remaining / 1000);
+    }
+
+    public int getCurrentRoomIndex() {
+        return rooms.indexOf(player.getCurrentRoom());
+    }
+
+    public int getCurrentSteps() {
+        return currentSteps;
+    }
+
+    public int getMaxSteps() {
+        return maxSteps;
+    }
+
+    public int getInventoryWeight() {
+        return player.getCurrentWeight();
+    }
+
+    public Player getPlayer() {
+        return player;
+    }
+
+    public List<Room> getRooms() {
+        return new ArrayList<>(rooms);
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public boolean isFinished() {
+        return finished;
     }
 }

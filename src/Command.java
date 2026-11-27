@@ -1,10 +1,10 @@
+
 public class Command {
 
-    private String commandWord;
-    private String secondWord;
+    private final String commandWord;
+    private final String secondWord;
 
     public Command(String commandWord, String secondWord) {
-
         this.commandWord = commandWord;
         this.secondWord = secondWord;
     }
@@ -17,11 +17,11 @@ public class Command {
         return secondWord;
     }
 
-    public boolean isUnknown() {
-        return commandWord == null;
-    }
-
     public boolean hasSecondWord() {
         return secondWord != null;
+    }
+
+    public boolean isUnknown() {
+        return commandWord == null;
     }
 }

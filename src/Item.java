@@ -1,11 +1,11 @@
-public class Item {
 
-    private String name;
-    private String description;
-    private int weight;
+public abstract class Item {
+
+    private final String name;
+    private final String description;
+    private final int weight;
 
     public Item(String name, String description, int weight) {
-
         this.name = name;
         this.description = description;
         this.weight = weight;
@@ -25,8 +25,7 @@ public class Item {
 
     @Override
     public String toString() {
-
         return name + " - " + description +
-                " (" + weight + " bytes)";
+                " (Peso: " + weight + ")";
     }
 }

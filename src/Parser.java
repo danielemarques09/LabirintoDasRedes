@@ -1,21 +1,21 @@
+
 import java.util.Scanner;
 
 public class Parser {
 
-    private CommandWords commands;
-    private Scanner reader;
+    private final CommandWords commands;
+    private final Scanner scanner;
 
     public Parser() {
-
         commands = new CommandWords();
-        reader = new Scanner(System.in);
+        scanner = new Scanner(System.in);
     }
 
     public Command getCommand() {
 
-        System.out.print("\n> ");
+        System.out.print("> ");
 
-        String input = reader.nextLine().trim().toLowerCase();
+        String input = scanner.nextLine().trim().toLowerCase();
 
         if (input.isEmpty()) {
             return new Command(null, null);
@@ -23,23 +23,17 @@ public class Parser {
 
         String[] words = input.split("\\s+", 2);
 
-        String word1 = words[0];
+        String commandWord = words[0];
+        String secondWord = words.length > 1 ? words[1] : null;
 
-        String word2 = null;
-
-        if (words.length > 1) {
-            word2 = words[1];
+        if (!commands.isCommand(commandWord)) {
+            return new Command(null, secondWord);
         }
 
-        if (!commands.isCommand(word1)) {
-
-            return new Command(null, word2);
-        }
-
-        return new Command(word1, word2);
+        return new Command(commandWord, secondWord);
     }
 
-    public void showCommands() {
-        commands.showAll();
+    public String showCommands() {
+        return commands.showAll();
     }
 }
