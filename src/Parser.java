@@ -1,39 +1,22 @@
-
-import java.util.Scanner;
-
 public class Parser {
+    private final CommandWords commandWords = new CommandWords();
 
-    private final CommandWords commands;
-    private final Scanner scanner;
-
-    public Parser() {
-        commands = new CommandWords();
-        scanner = new Scanner(System.in);
-    }
-
-    public Command getCommand() {
-
-        System.out.print("> ");
-
-        String input = scanner.nextLine().trim().toLowerCase();
-
-        if (input.isEmpty()) {
+    public Command parse(String input) {
+        if (input == null || input.isBlank()) {
             return new Command(null, null);
         }
 
-        String[] words = input.split("\\s+", 2);
+        String[] words = input.trim().toLowerCase().split("\\s+", 2);
+        String first = words[0];
+        String second = words.length > 1 ? words[1] : null;
 
-        String commandWord = words[0];
-        String secondWord = words.length > 1 ? words[1] : null;
-
-        if (!commands.isCommand(commandWord)) {
-            return new Command(null, secondWord);
+        if (!commandWords.isCommand(first)) {
+            return new Command(null, second);
         }
-
-        return new Command(commandWord, secondWord);
+        return new Command(first, second);
     }
 
-    public String showCommands() {
-        return commands.showAll();
+    public String getCommands() {
+        return commandWords.showAll();
     }
 }

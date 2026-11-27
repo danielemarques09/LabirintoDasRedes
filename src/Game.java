@@ -1,278 +1,272 @@
-
 import java.util.ArrayList;
 import java.util.List;
 
 public class Game {
-
     private Player player;
-    private List<Room> rooms;
+    private final List<Room> rooms = new ArrayList<>();
+    private final MazeMap mazeMap = new MazeMap();
+    private final Parser parser = new Parser();
 
-    private int currentSteps;
-    private final int maxSteps = 100;
-
-    private final long startTime;
-    private final long timeLimit = 180000;
+    private int playerX = 2;
+    private int playerY = 2;
+    private int hops = 0;
+    private final int maxHops = 85;
+    private final long startTime = System.currentTimeMillis();
+    private final long timeLimitMillis = 180_000;
 
     private boolean finished;
-    private String status;
+    private boolean victory;
+    private String status = "Encontre o Ping, o token, o log e a chave. Chegue ao Gateway!";
 
-    public Game() {
-
-        currentSteps = 0;
-        finished = false;
-        status = "Encontre os itens e chegue ao Gateway.";
-
-        startTime = System.currentTimeMillis();
-
-        createRooms();
-    }
+    public Game() { createRooms(); }
 
     private void createRooms() {
-
-        rooms = new ArrayList<>();
-
-        Room start = new Room("Sala inicial - Estação de trabalho");
-        Room corridor = new Room("Corredor principal da rede");
-        Room switchRoom = new Room("Sala do Switch");
-        LockedRoom firewall = new LockedRoom(
-                "Sala protegida pelo Firewall",
-                "token"
-        );
-        Room server = new Room("Sala dos Servidores");
-        LockedRoom gateway = new LockedRoom(
-                "Gateway principal",
-                "chave"
-        );
+        Room start = new Room("Estação de Trabalho",
+                "Você iniciou na estação. Colete o Ping para testar a conectividade.");
+        Room corridor = new Room("Corredor Principal",
+                "O corredor conecta os equipamentos. Há um token de autenticação.");
+        Room switchRoom = new Room("Sala do Switch",
+                "O switch controla o tráfego. Resolva o desafio de endereço IP.");
+        LockedRoom firewall = new LockedRoom("Firewall",
+                "Área protegida. É necessário possuir o token.", "token");
+        FaultyRouterRoom deadEnd = new FaultyRouterRoom("Beco sem saída — Roteador defeituoso",
+                "O roteador está instável. A entrada custa dois saltos extras. Há um log corrompido.");
+        Room servers = new Room("Sala dos Servidores",
+                "Os servidores guardam a chave de segurança do Gateway.");
+        LockedRoom gateway = new LockedRoom("Gateway",
+                "Saída da rede. A chave de segurança é obrigatória.", "chave");
 
         start.setExit("leste", corridor);
-
         corridor.setExit("oeste", start);
         corridor.setExit("leste", switchRoom);
-
+        corridor.setExit("sul", deadEnd);
         switchRoom.setExit("oeste", corridor);
         switchRoom.setExit("sul", firewall);
-
         firewall.setExit("norte", switchRoom);
-        firewall.setExit("leste", server);
-
-        server.setExit("oeste", firewall);
-        server.setExit("leste", gateway);
-
-        gateway.setExit("oeste", server);
+        firewall.setExit("leste", servers);
+        servers.setExit("oeste", firewall);
+        servers.setExit("leste", gateway);
+        gateway.setExit("oeste", servers);
+        deadEnd.setExit("norte", corridor);
 
         start.addItem(new PingItem());
         corridor.addItem(new TokenItem());
-        switchRoom.addItem(new CorruptedLogItem());
-        server.addItem(new SecurityKey());
+        deadEnd.addItem(new CorruptedLogItem());
+        servers.addItem(new SecurityKey());
 
-        switchRoom.setChallenge(
-                new NetworkChallenge(
-                        "Qual é o endereço IP do Gateway?",
-                        "192.168.1.1"
-                )
-        );
+        switchRoom.setChallenge(new NetworkChallenge(
+                "Qual é o endereço IPv4 do Gateway indicado no log?",
+                "192.168.1.1"
+        ));
 
         rooms.add(start);
         rooms.add(corridor);
         rooms.add(switchRoom);
         rooms.add(firewall);
-        rooms.add(server);
+        rooms.add(deadEnd);
+        rooms.add(servers);
         rooms.add(gateway);
 
-        player = new Player(start);
+        player = new Player(start, 50);
     }
 
-    public boolean enterMazeRoom(int destinationIndex) {
+    public boolean movePlayer(int dx, int dy) {
+        if (finished) return false;
+        checkLimits();
+        if (finished) return false;
 
-        if (finished) {
+        int nx = playerX + dx;
+        int ny = playerY + dy;
+        if (!mazeMap.isWalkable(nx, ny)) {
+            status = "Parede! Esse caminho está bloqueado.";
             return false;
         }
 
-        if (destinationIndex < 0 || destinationIndex >= rooms.size()) {
-            return false;
-        }
-
+        int currentRoomIndex = rooms.indexOf(player.getCurrentRoom());
+        int targetRoomIndex = mazeMap.getRoomIndex(nx, ny);
         Room current = player.getCurrentRoom();
-        Room destination = rooms.get(destinationIndex);
+        Room target = rooms.get(targetRoomIndex);
 
-        if (current == destination) {
-            return true;
+        if (targetRoomIndex != currentRoomIndex) {
+            if (!current.hasExitTo(target)) {
+                status = "Não há passagem direta para essa sala.";
+                return false;
+            }
+
+            NetworkChallenge challenge = current.getChallenge();
+            if (challenge != null && !challenge.isSolved()) {
+                status = "Resolva o desafio do Switch antes de sair.";
+                return false;
+            }
+
+            if (!target.canEnter(player)) {
+                status = "Acesso negado: falta o item de autorização exigido.";
+                return false;
+            }
+
+            player.setCurrentRoom(target);
+            status = "Você entrou em: " + target.getName() + ".";
+            hops += target.getEntryPenalty();
+            if (target.getEntryPenalty() > 0) {
+                status += " Roteador defeituoso: +" + target.getEntryPenalty() + " saltos.";
+            }
         }
 
-        if (!current.hasExitTo(destination)) {
-            status = "Esse caminho não está disponível.";
-            return false;
-        }
-
-        NetworkChallenge challenge = current.getChallenge();
-
-        if (challenge != null && !challenge.isSolved()) {
-            status = "Resolva o desafio da sala antes de sair.";
-            return false;
-        }
-
-        if (!destination.canEnter(player)) {
-            status = "Acesso bloqueado! Você precisa do item necessário.";
-            return false;
-        }
-
-        player.setCurrentRoom(destination);
-        currentSteps++;
-
-        status = "Você entrou em: " + destination.getDescription();
-
-        if (destination == rooms.get(5)) {
-            victory();
-        }
-
+        playerX = nx;
+        playerY = ny;
+        hops++;
         checkLimits();
 
-        return !finished;
+        if (targetRoomIndex == 6 && !finished) {
+            victory = true;
+            finished = true;
+            status = "MISSÃO CONCLUÍDA! Você chegou ao Gateway com a chave de segurança.";
+        }
+        return true;
     }
 
-    public void countMovement() {
-
-        if (finished) {
-            return;
-        }
-
-        currentSteps++;
+    public void executeCommand(String input) {
+        if (finished) { status = "A missão já terminou."; return; }
         checkLimits();
+        if (finished) return;
+
+        Command command = parser.parse(input);
+        if (command.isUnknown()) { status = "Comando desconhecido. Digite ajuda."; return; }
+
+        String word = command.getCommandWord();
+        String arg = command.getSecondWord();
+
+        switch (word) {
+            case "ir":
+                moveByDirection(arg);
+                break;
+            case "pegar":
+                status = arg == null ? "Informe o nome do item." :
+                        (takeItem(arg) ? "Item coletado: " + arg : "Não foi possível pegar. Verifique o item e o limite de bytes.");
+                break;
+            case "solta":
+                status = arg == null ? "Informe o nome do item." :
+                        (dropItem(arg) ? "Item solto: " + arg : "Você não possui esse item.");
+                break;
+            case "inventario":
+            case "inventário":
+                status = player.getInventoryString();
+                break;
+            case "usar":
+                useItem(arg);
+                break;
+            case "olhar":
+                status = player.getCurrentRoom().getLongDescription();
+                break;
+            case "ajuda":
+                status = "Comandos: " + parser.getCommands() +
+                        ". Movimento: setas ou W/A/S/D. Objetivo: obter a chave e chegar ao Gateway.";
+                break;
+            case "sair":
+                finished = true;
+                victory = false;
+                status = "Você encerrou a missão.";
+                break;
+            default:
+                status = "Comando inválido.";
+        }
+    }
+
+    private void moveByDirection(String direction) {
+        if (direction == null) { status = "Informe norte, sul, leste ou oeste."; return; }
+        switch (direction) {
+            case "norte": movePlayer(0, -1); break;
+            case "sul": movePlayer(0, 1); break;
+            case "leste": movePlayer(1, 0); break;
+            case "oeste": movePlayer(-1, 0); break;
+            default: status = "Direção inválida.";
+        }
     }
 
     public boolean takeItem(String name) {
-
-        if (finished) {
-            return false;
-        }
-
-        boolean result = player.takeItem(name);
-
-        if (result) {
-            status = "Item coletado: " + name;
-        } else {
-            status = "Não foi possível pegar esse item. Confira o nome e o peso.";
-        }
-
-        return result;
+        if (finished) return false;
+        return player.takeItem(name);
     }
 
     public boolean dropItem(String name) {
-
-        if (finished) {
-            return false;
-        }
-
-        boolean result = player.dropItem(name);
-
-        status = result
-                ? "Item solto: " + name
-                : "Você não possui esse item.";
-
-        return result;
+        if (finished) return false;
+        return player.dropItem(name);
     }
 
-    public void usePing() {
+    private void useItem(String name) {
+        if (name == null) { status = "Informe o item ou o endereço IP para usar."; return; }
 
-        if (finished) {
-            return;
+        if (name.equalsIgnoreCase("ping")) {
+            Item item = player.getItem("ping");
+            if (item instanceof PingItem) {
+                status = ((PingItem) item).use();
+                player.consumeItem("ping");
+            } else {
+                status = "Você não possui o Ping.";
+            }
+        } else if (name.equalsIgnoreCase("log")) {
+            if (player.hasItem("log")) {
+                status = "Trecho recuperado do log: Gateway IPv4 = 192.168.1.1. Use esse endereço no desafio do Switch.";
+            } else {
+                status = "Você precisa encontrar o log corrompido no beco sem saída.";
+            }
+        } else if (name.equals("192.168.1.1")) {
+            solveChallenge(name);
+        } else {
+            status = "Esse item não pode ser usado agora.";
         }
-
-        if (!player.hasItem("ping")) {
-            status = "Você não possui o item Ping.";
-            return;
-        }
-
-        status = "Ping realizado! Verifique a conexão com o Gateway: 192.168.1.1.";
     }
 
     public boolean solveChallenge(String answer) {
-
-        if (finished) {
+        if (finished) return false;
+        if (!player.hasItem("log")) {
+            status = "Você precisa coletar o log corrompido para ter a pista.";
             return false;
         }
-
-        NetworkChallenge challenge =
-                player.getCurrentRoom().getChallenge();
-
+        NetworkChallenge challenge = player.getCurrentRoom().getChallenge();
         if (challenge == null) {
-            status = "Não existe desafio nesta sala.";
+            status = "Você precisa estar na Sala do Switch para resolver o desafio.";
             return false;
         }
-
         if (challenge.checkAnswer(answer)) {
-            status = "Resposta correta! O caminho está liberado.";
+            status = "Resposta correta! O desafio do Switch foi resolvido.";
             return true;
         }
-
-        status = "Resposta incorreta. Tente novamente.";
+        status = "Endereço incorreto. Consulte o log e tente novamente.";
         return false;
     }
 
     private void checkLimits() {
-
-        if (currentSteps >= maxSteps) {
-            gameOver("Você ultrapassou o limite de movimentos.");
+        if (finished) return;
+        if (hops >= maxHops) {
+            gameOver("LIMITE DE SALTOS EXCEDIDO! O ransomware criptografou os dados.");
             return;
         }
-
-        if (System.currentTimeMillis() - startTime >= timeLimit) {
-            gameOver("O tempo acabou! A rede foi comprometida.");
+        if (System.currentTimeMillis() - startTime >= timeLimitMillis) {
+            gameOver("TEMPO ESGOTADO! O ransomware criptografou os dados.");
         }
-    }
-
-    private void victory() {
-
-        finished = true;
-        status = "PARABÉNS! Você chegou ao Gateway e concluiu a missão!";
     }
 
     private void gameOver(String message) {
         finished = true;
+        victory = false;
         status = message;
     }
 
     public int getRemainingSeconds() {
-
-        long elapsed = System.currentTimeMillis() - startTime;
-        long remaining = Math.max(0, timeLimit - elapsed);
-
-        if (remaining == 0 && !finished) {
-            gameOver("O tempo acabou! A rede foi comprometida.");
-        }
-
+        long remaining = Math.max(0, timeLimitMillis - (System.currentTimeMillis() - startTime));
+        if (remaining == 0 && !finished) gameOver("TEMPO ESGOTADO! O ransomware criptografou os dados.");
         return (int) (remaining / 1000);
     }
 
-    public int getCurrentRoomIndex() {
-        return rooms.indexOf(player.getCurrentRoom());
-    }
-
-    public int getCurrentSteps() {
-        return currentSteps;
-    }
-
-    public int getMaxSteps() {
-        return maxSteps;
-    }
-
-    public int getInventoryWeight() {
-        return player.getCurrentWeight();
-    }
-
-    public Player getPlayer() {
-        return player;
-    }
-
-    public List<Room> getRooms() {
-        return new ArrayList<>(rooms);
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public boolean isFinished() {
-        return finished;
-    }
+    public Player getPlayer() { return player; }
+    public MazeMap getMazeMap() { return mazeMap; }
+    public int getPlayerX() { return playerX; }
+    public int getPlayerY() { return playerY; }
+    public int getHops() { return hops; }
+    public int getMaxHops() { return maxHops; }
+    public boolean isFinished() { return finished; }
+    public boolean isVictory() { return victory; }
+    public String getStatus() { return status; }
+    public int getCurrentRoomIndex() { return rooms.indexOf(player.getCurrentRoom()); }
 }

@@ -1,7 +1,10 @@
-
-public class PingItem extends Item {
-
+public class PingItem extends ConsumableItem {
     public PingItem() {
-        super("ping", "Ferramenta para testar a conexão", 5);
+        super("ping", "Ferramenta de diagnóstico de conectividade", 5);
+    }
+
+    @Override
+    public String use() {
+        return "PING 192.168.1.1: resposta recebida. Conectividade identificada.";
     }
 }

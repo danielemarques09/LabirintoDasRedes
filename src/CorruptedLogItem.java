@@ -1,7 +1,5 @@
-
 public class CorruptedLogItem extends Item {
-
     public CorruptedLogItem() {
-        super("log", "Registro de rede parcialmente corrompido", 10);
+        super("log", "Log corrompido com uma pista sobre o endereço do Gateway", 10);
     }
 }

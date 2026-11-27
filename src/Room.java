@@ -1,28 +1,24 @@
-
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class Room {
-
+    private final String name;
     private final String description;
-
-    private final Map<String, Room> exits;
-    private final Map<String, Item> items;
-
+    private final Map<String, Room> exits = new LinkedHashMap<>();
+    private final Map<String, Item> items = new LinkedHashMap<>();
     private NetworkChallenge challenge;
 
-    public Room(String description) {
+    public Room(String name, String description) {
+        this.name = name;
         this.description = description;
-        exits = new HashMap<>();
-        items = new HashMap<>();
     }
 
     public void setExit(String direction, Room room) {
-        exits.put(direction, room);
+        exits.put(direction.toLowerCase(), room);
     }
 
     public Room getExit(String direction) {
-        return exits.get(direction);
+        return exits.get(direction.toLowerCase());
     }
 
     public boolean hasExitTo(Room room) {
@@ -33,45 +29,34 @@ public class Room {
         items.put(item.getName().toLowerCase(), item);
     }
 
-    public Item removeItem(String name) {
-        return items.remove(name.toLowerCase());
+    public Item getItem(String name) {
+        return name == null ? null : items.get(name.toLowerCase());
     }
 
-    public Item getItem(String name) {
-        return items.get(name.toLowerCase());
+    public Item removeItem(String name) {
+        return name == null ? null : items.remove(name.toLowerCase());
     }
 
     public String getItemString() {
-
-        if (items.isEmpty()) {
-            return "Nenhum item disponível.";
-        }
-
-        return String.join(", ", items.keySet());
+        return items.isEmpty() ? "Nenhum item disponível." : String.join(", ", items.keySet());
     }
 
     public void setChallenge(NetworkChallenge challenge) {
         this.challenge = challenge;
     }
 
-    public NetworkChallenge getChallenge() {
-        return challenge;
-    }
+    public NetworkChallenge getChallenge() { return challenge; }
 
-    public boolean canEnter(Player player) {
-        return true;
-    }
+    public boolean canEnter(Player player) { return true; }
 
-    public String getDescription() {
-        return description;
-    }
+    public int getEntryPenalty() { return 0; }
+
+    public String getName() { return name; }
+    public String getDescription() { return description; }
 
     public String getLongDescription() {
-        return description + "\nSaídas: " + getExitString()
+        return name + "\n" + description
+                + "\nSaídas: " + String.join(", ", exits.keySet())
                 + "\nItens: " + getItemString();
-    }
-
-    public String getExitString() {
-        return String.join(", ", exits.keySet());
     }
 }

@@ -1,7 +1,5 @@
-
 public class SecurityKey extends Item {
-
     public SecurityKey() {
-        super("chave", "Chave de segurança do Gateway", 10);
+        super("chave", "Chave de segurança/criptografia do Gateway", 10);
     }
 }
